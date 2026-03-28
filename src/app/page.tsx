@@ -5,6 +5,7 @@ import { Upload, Music, Settings2, Download, Play, Pause, Image as ImageIcon, Lo
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAudioAnalyzer } from '@/hooks/useAudioAnalyzer';
 import { Visualizer } from '@/components/Visualizer';
+import { analyzeAudioMood, buildPromptFromAudio } from '@/lib/utils';
 
 const STYLES = ['Pulsing Glow', 'Particle Field', 'VHS Dreams'];
 
@@ -24,17 +25,46 @@ export default function LoopCanvasPro() {
     }
   };
 
-  const generateArtworks = (filename: string) => {
+  const generateArtworks = async (filename: string) => {
     setIsGeneratingArtwork(true);
-    // Use locally generated static artwork images
-    setTimeout(() => {
+    
+    try {
+      // 1. Obtenemos un poco de datos del audio actual
+      const freqData = getFrequencyData(); 
+      const mood = freqData ? analyzeAudioMood(freqData) : { isBassHeavy: false, isBright: false, energy: 0.5 };
+      
+      // 2. Construimos el prompt profesional
+      const prompt = buildPromptFromAudio(styleName, mood);
+      console.log("Generando imagen con prompt:", prompt);
+
+      const response = await fetch('/api/generate-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Falló la generación: ${errText}`);
+      }
+
+      const blob = await response.blob();
+      const localUrl = URL.createObjectURL(blob);
+      
+      // 4. Actualizamos el estado con la nueva imagen en memoria
+      setArtworks([localUrl]);
+      
+    } catch (error) {
+      console.error('Error generando artwork:', error);
+      // Fallback de seguridad en caso de error
       setArtworks([
         '/artworks/neon.png',
         '/artworks/minimal.png',
         '/artworks/lofi.png'
       ]);
+    } finally {
       setIsGeneratingArtwork(false);
-    }, 1500);
+    }
   };
 
   const downloadArtwork = async (url: string, index: number) => {
